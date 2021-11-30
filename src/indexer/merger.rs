@@ -369,7 +369,7 @@ impl IndexMerger {
             let fast_field_reader = &fast_field_readers[*reader_ordinal as usize];
             fast_field_reader.get(*doc_id)
         });
-        fast_field_serializer.create_auto_detect_u64_fast_field(
+        fast_field_serializer.new_u64_fast_field_with_best_codec(
             field,
             stats,
             fastfield_accessor,
@@ -536,7 +536,7 @@ impl IndexMerger {
         }
         offsets.push(offset);
 
-        fast_field_serializer.create_auto_detect_u64_fast_field(
+        fast_field_serializer.new_u64_fast_field_with_best_codec(
             field,
             stats,
             &offsets[..],
@@ -755,7 +755,7 @@ impl IndexMerger {
                 vals.into_iter()
             })
             .flatten();
-        fast_field_serializer.create_auto_detect_u64_fast_field_with_idx(
+        fast_field_serializer.new_u64_fast_field_with_idx_with_best_codec(
             field,
             stats,
             fastfield_accessor,
