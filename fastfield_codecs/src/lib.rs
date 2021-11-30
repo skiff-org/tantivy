@@ -89,7 +89,7 @@ mod tests {
         linearinterpol::{LinearInterpolFastFieldReader, LinearInterpolFastFieldSerializer},
         multilinearinterpol::{
             MultiLinearInterpolFastFieldReader, MultiLinearInterpolFastFieldSerializer,
-        },
+        }, piecewise_linear::{PiecewiseLinearFastFieldSerializer, PiecewiseLinearFastFieldReader}, frame_of_reference::{FORFastFieldSerializer, FORFastFieldReader},
     };
 
     pub fn create_and_validate<S: FastFieldCodecSerializer, R: FastFieldCodecReader>(
@@ -166,6 +166,16 @@ mod tests {
     #[test]
     fn test_codec_multi_interpolation() {
         test_codec::<MultiLinearInterpolFastFieldSerializer, MultiLinearInterpolFastFieldReader>();
+    }
+
+    #[test]
+    fn test_codec_piecewise_linear() {
+        test_codec::<PiecewiseLinearFastFieldSerializer, PiecewiseLinearFastFieldReader>();
+    }
+
+    #[test]
+    fn test_codec_for() {
+        test_codec::<FORFastFieldSerializer, FORFastFieldReader>();
     }
 
     use super::*;
