@@ -10,11 +10,11 @@ use crate::DocId;
 use common::BinarySerializable;
 use fastfield_codecs::bitpacked::BitpackedFastFieldReader as BitpackedReader;
 use fastfield_codecs::bitpacked::BitpackedFastFieldSerializer;
-use fastfield_codecs::frame_of_reference::FORFastFieldReader;
-use fastfield_codecs::frame_of_reference::FORFastFieldSerializer;
 use fastfield_codecs::linearinterpol::LinearInterpolFastFieldReader;
+#[allow(deprecated)]
 use fastfield_codecs::linearinterpol::LinearInterpolFastFieldSerializer;
 use fastfield_codecs::multilinearinterpol::MultiLinearInterpolFastFieldReader;
+#[allow(deprecated)]
 use fastfield_codecs::multilinearinterpol::MultiLinearInterpolFastFieldSerializer;
 use fastfield_codecs::piecewise_linear::PiecewiseLinearFastFieldReader;
 use fastfield_codecs::piecewise_linear::PiecewiseLinearFastFieldSerializer;
@@ -77,8 +77,6 @@ pub enum DynamicFastFieldReader<Item: FastValue> {
     MultiLinearInterpol(FastFieldReaderCodecWrapper<Item, MultiLinearInterpolFastFieldReader>),
     /// Piecewise linear interpolated values + bitpacked
     PiecewiseLinear(FastFieldReaderCodecWrapper<Item, PiecewiseLinearFastFieldReader>),
-    /// Frame of reference values + bitpacked
-    FOR(FastFieldReaderCodecWrapper<Item, FORFastFieldReader>),
 }
 
 impl<Item: FastValue> DynamicFastFieldReader<Item> {
@@ -94,12 +92,14 @@ impl<Item: FastValue> DynamicFastFieldReader<Item> {
                     BitpackedReader,
                 >::open_from_bytes(bytes)?)
             }
+            #[allow(deprecated)]
             LinearInterpolFastFieldSerializer::ID => {
                 DynamicFastFieldReader::LinearInterpol(FastFieldReaderCodecWrapper::<
                     Item,
                     LinearInterpolFastFieldReader,
                 >::open_from_bytes(bytes)?)
             }
+            #[allow(deprecated)]
             MultiLinearInterpolFastFieldSerializer::ID => {
                 DynamicFastFieldReader::MultiLinearInterpol(FastFieldReaderCodecWrapper::<
                     Item,
@@ -114,9 +114,6 @@ impl<Item: FastValue> DynamicFastFieldReader<Item> {
                     PiecewiseLinearFastFieldReader,
                 >::open_from_bytes(bytes)?)
             }
-            FORFastFieldSerializer::ID => DynamicFastFieldReader::FOR(
-                FastFieldReaderCodecWrapper::<Item, FORFastFieldReader>::open_from_bytes(bytes)?,
-            ),
             _ => {
                 panic!(
                     "unknown fastfield id {:?}. Data corrupted or using old tantivy version.",
@@ -135,7 +132,6 @@ impl<Item: FastValue> FastFieldReader<Item> for DynamicFastFieldReader<Item> {
             Self::LinearInterpol(reader) => reader.get(doc),
             Self::MultiLinearInterpol(reader) => reader.get(doc),
             Self::PiecewiseLinear(reader) => reader.get(doc),
-            Self::FOR(reader) => reader.get(doc),
         }
     }
     fn get_range(&self, start: u64, output: &mut [Item]) {
@@ -144,7 +140,6 @@ impl<Item: FastValue> FastFieldReader<Item> for DynamicFastFieldReader<Item> {
             Self::LinearInterpol(reader) => reader.get_range(start, output),
             Self::MultiLinearInterpol(reader) => reader.get_range(start, output),
             Self::PiecewiseLinear(reader) => reader.get_range(start, output),
-            Self::FOR(reader) => reader.get_range(start, output),
         }
     }
     fn min_value(&self) -> Item {
@@ -153,7 +148,6 @@ impl<Item: FastValue> FastFieldReader<Item> for DynamicFastFieldReader<Item> {
             Self::LinearInterpol(reader) => reader.min_value(),
             Self::MultiLinearInterpol(reader) => reader.min_value(),
             Self::PiecewiseLinear(reader) => reader.min_value(),
-            Self::FOR(reader) => reader.min_value(),
         }
     }
     fn max_value(&self) -> Item {
@@ -162,7 +156,6 @@ impl<Item: FastValue> FastFieldReader<Item> for DynamicFastFieldReader<Item> {
             Self::LinearInterpol(reader) => reader.max_value(),
             Self::MultiLinearInterpol(reader) => reader.max_value(),
             Self::PiecewiseLinear(reader) => reader.max_value(),
-            Self::FOR(reader) => reader.max_value(),
         }
     }
 }

@@ -6,11 +6,7 @@ extern crate test;
 mod tests {
     use fastfield_codecs::{
         bitpacked::{BitpackedFastFieldReader, BitpackedFastFieldSerializer},
-        linearinterpol::{LinearInterpolFastFieldReader, LinearInterpolFastFieldSerializer},
-        multilinearinterpol::{
-            MultiLinearInterpolFastFieldReader, MultiLinearInterpolFastFieldSerializer,
-        },
-        *,
+        *, piecewise_linear::{PiecewiseLinearFastFieldSerializer, PiecewiseLinearFastFieldReader},
     };
 
     fn get_data() -> Vec<u64> {
@@ -70,14 +66,9 @@ mod tests {
         bench_create::<BitpackedFastFieldSerializer>(b, &data);
     }
     #[bench]
-    fn bench_fastfield_linearinterpol_create(b: &mut Bencher) {
+    fn bench_fastfield_piecewise_linear_create(b: &mut Bencher) {
         let data: Vec<_> = get_data();
-        bench_create::<LinearInterpolFastFieldSerializer>(b, &data);
-    }
-    #[bench]
-    fn bench_fastfield_multilinearinterpol_create(b: &mut Bencher) {
-        let data: Vec<_> = get_data();
-        bench_create::<MultiLinearInterpolFastFieldSerializer>(b, &data);
+        bench_create::<PiecewiseLinearFastFieldSerializer>(b, &data);
     }
     #[bench]
     fn bench_fastfield_bitpack_get(b: &mut Bencher) {
@@ -85,14 +76,9 @@ mod tests {
         bench_get::<BitpackedFastFieldSerializer, BitpackedFastFieldReader>(b, &data);
     }
     #[bench]
-    fn bench_fastfield_linearinterpol_get(b: &mut Bencher) {
+    fn bench_fastfield_piecewise_linear_get(b: &mut Bencher) {
         let data: Vec<_> = get_data();
-        bench_get::<LinearInterpolFastFieldSerializer, LinearInterpolFastFieldReader>(b, &data);
-    }
-    #[bench]
-    fn bench_fastfield_multilinearinterpol_get(b: &mut Bencher) {
-        let data: Vec<_> = get_data();
-        bench_get::<MultiLinearInterpolFastFieldSerializer, MultiLinearInterpolFastFieldReader>(
+        bench_get::<PiecewiseLinearFastFieldSerializer, PiecewiseLinearFastFieldReader>(
             b, &data,
         );
     }
