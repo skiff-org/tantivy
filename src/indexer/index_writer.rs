@@ -1,13 +1,13 @@
 use std::ops::Range;
 use std::sync::Arc;
-use std::thread;
+use std::{thread};
 use std::thread::JoinHandle;
 
 use common::BitSet;
 use crossbeam::channel;
 use futures::executor::block_on;
 use futures::future::Future;
-use smallvec::smallvec;
+use smallvec::{smallvec, SmallVec};
 
 use super::operation::{AddOperation, UserOperation};
 use super::segment_updater::SegmentUpdater;
@@ -64,9 +64,6 @@ pub struct IndexWriter {
     memory_arena_in_bytes_per_thread: usize,
 
     workers_join_handle: Vec<JoinHandle<crate::Result<()>>>,
-
-    index_writer_status: IndexWriterStatus,
-    operation_sender: AddBatchSender,
 
     segment_updater: SegmentUpdater,
 
@@ -174,7 +171,7 @@ fn index_documents(
     memory_budget: usize,
     segment: Segment,
     grouped_document_iterator: &mut dyn Iterator<Item = AddBatch>,
-    segment_updater: &mut SegmentUpdater,
+    segment_updater: &SegmentUpdater,
     mut delete_cursor: DeleteCursor,
 ) -> crate::Result<()> {
     let schema = segment.schema();
@@ -290,8 +287,6 @@ impl IndexWriter {
             );
             return Err(TantivyError::InvalidArgument(err_msg));
         }
-        let (document_sender, document_receiver): (AddBatchSender, AddBatchReceiver) =
-            channel::bounded(PIPELINE_MAX_SIZE_IN_DOCS);
 
         let delete_queue = DeleteQueue::new();
 
@@ -307,9 +302,6 @@ impl IndexWriter {
 
             memory_arena_in_bytes_per_thread,
             index: index.clone(),
-
-            index_writer_status: IndexWriterStatus::from(document_receiver),
-            operation_sender: document_sender,
 
             segment_updater,
 
@@ -328,8 +320,7 @@ impl IndexWriter {
     }
 
     fn drop_sender(&mut self) {
-        let (sender, _receiver) = channel::bounded(1);
-        self.operation_sender = sender;
+        
     }
 
     /// Accessor to the index.
@@ -383,67 +374,30 @@ impl IndexWriter {
         self.index.new_segment()
     }
 
-    fn operation_receiver(&self) -> crate::Result<AddBatchReceiver> {
-        self.index_writer_status
-            .operation_receiver()
-            .ok_or_else(|| {
-                crate::TantivyError::ErrorInThread(
-                    "The index writer was killed. It can happen if an indexing worker \
-                     encounterred an Io error for instance."
-                        .to_string(),
-                )
-            })
-    }
-
     /// Spawns a new worker thread for indexing.
     /// The thread consumes documents from the pipeline.
     fn add_indexing_worker(&mut self) -> crate::Result<()> {
-        let document_receiver_clone = self.operation_receiver()?;
-        let index_writer_bomb = self.index_writer_status.create_bomb();
+        Ok(())
+    }
 
-        let mut segment_updater = self.segment_updater.clone();
 
-        let mut delete_cursor = self.delete_queue.cursor();
+    fn wrap_index_doc(&self, operation_grp: SmallVec<[AddOperation; 4]>) -> crate::Result<()>{
+
+        let delete_cursor = self.delete_queue.cursor();
 
         let mem_budget = self.memory_arena_in_bytes_per_thread;
         let index = self.index.clone();
-        let join_handle: JoinHandle<crate::Result<()>> = thread::Builder::new()
-            .name(format!("thrd-tantivy-index{}", self.worker_id))
-            .spawn(move || {
-                loop {
-                    let mut document_iterator = document_receiver_clone
-                        .clone()
-                        .into_iter()
-                        .filter(|batch| !batch.is_empty())
-                        .peekable();
 
-                    // The peeking here is to avoid creating a new segment's files
-                    // if no document are available.
-                    //
-                    // This is a valid guarantee as the peeked document now belongs to
-                    // our local iterator.
-                    if let Some(batch) = document_iterator.peek() {
-                        assert!(!batch.is_empty());
-                        delete_cursor.skip_to(batch[0].opstamp);
-                    } else {
-                        // No more documents.
-                        // It happens when there is a commit, or if the `IndexWriter`
-                        // was dropped.
-                        index_writer_bomb.defuse();
-                        return Ok(());
-                    }
-
-                    index_documents(
-                        mem_budget,
-                        index.new_segment(),
-                        &mut document_iterator,
-                        &mut segment_updater,
-                        delete_cursor.clone(),
-                    )?;
-                }
-            })?;
-        self.worker_id += 1;
-        self.workers_join_handle.push(join_handle);
+        let mut document_iterator = vec![operation_grp].into_iter();
+        
+        let segment = index.new_segment();
+        index_documents(
+            mem_budget,
+            segment,
+            &mut document_iterator,
+            &self.segment_updater,
+            delete_cursor.clone(),
+        )?;
         Ok(())
     }
 
@@ -535,11 +489,9 @@ impl IndexWriter {
     /// when no documents are remaining.
     ///
     /// Returns the former segment_ready channel.
-    fn recreate_document_channel(&mut self) {
-        let (document_sender, document_receiver): (AddBatchSender, AddBatchReceiver) =
-            channel::bounded(PIPELINE_MAX_SIZE_IN_DOCS);
-        self.operation_sender = document_sender;
-        self.index_writer_status = IndexWriterStatus::from(document_receiver);
+    #[allow(unused_must_use)]
+    fn recreate_document_channel(&mut self) -> () {
+        
     }
 
     /// Rollback to the last commit
@@ -555,7 +507,6 @@ impl IndexWriter {
         // marks the segment updater as killed. From now on, all
         // segment updates will be ignored.
         self.segment_updater.kill();
-        let document_receiver_res = self.operation_receiver();
 
         // take the directory lock to create a new index_writer.
         let directory_lock = self
@@ -581,9 +532,6 @@ impl IndexWriter {
         //
         // This will reach an end as the only document_sender
         // was dropped with the index_writer.
-        if let Ok(document_receiver) = document_receiver_res {
-            for _ in document_receiver {}
-        }
 
         Ok(self.committed_opstamp)
     }
@@ -698,7 +646,8 @@ impl IndexWriter {
     /// document queue.
     pub fn add_document(&self, document: Document) -> crate::Result<Opstamp> {
         let opstamp = self.stamper.stamp();
-        self.send_add_documents_batch(smallvec![AddOperation { opstamp, document }])?;
+        let add_operation = AddOperation { opstamp, document };
+        let send_result = self.wrap_index_doc(smallvec![add_operation])?;
         Ok(opstamp)
     }
 
@@ -756,16 +705,8 @@ impl IndexWriter {
                 }
             }
         }
-        self.send_add_documents_batch(adds)?;
+        let send_result = self.wrap_index_doc(adds)?;
         Ok(batch_opstamp)
-    }
-
-    fn send_add_documents_batch(&self, add_ops: AddBatch) -> crate::Result<()> {
-        if self.index_writer_status.is_alive() && self.operation_sender.send(add_ops).is_ok() {
-            Ok(())
-        } else {
-            Err(error_in_index_worker_thread("An index writer was killed."))
-        }
     }
 }
 
