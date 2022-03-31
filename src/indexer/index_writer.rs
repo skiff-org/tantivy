@@ -651,6 +651,64 @@ impl IndexWriter {
         Ok(opstamp)
     }
 
+    /// Create a Segment and a SegmentWriter that we can use later on to add documents and then finalize the addition of the documents 
+    pub fn get_segment_writer_and_segment(&self)-> crate::Result<(SegmentWriter, Segment)>{
+        let segment = self.index.new_segment();
+        let schema = segment.schema();
+        let segment_writer = SegmentWriter::for_segment(self.memory_arena_in_bytes_per_thread, segment.clone(), schema)?;
+        Ok((segment_writer, segment))
+    }
+
+    /// Add documents to a SegmentWriter
+    /// When at least one document have been added, the finalize_document_addition must be invoked
+    pub fn add_document_to_segment_writer(&self, segment_writer: &mut SegmentWriter, document: Document)-> crate::Result<bool>{
+        let opstamp = self.stamper.stamp();
+        let add_operation = AddOperation { opstamp, document };
+
+        segment_writer.add_document(add_operation)?;
+
+        let mut memory_budget_reached = false;
+
+        let mem_usage = segment_writer.mem_usage();
+        if mem_usage >= self.memory_arena_in_bytes_per_thread - MARGIN_IN_BYTES {
+            memory_budget_reached = true;
+            info!(
+                "Buffer limit reached, flushing segment with maxdoc={}.",
+                segment_writer.max_doc()
+            );
+        }
+        Ok(memory_budget_reached)
+    }
+
+    /// Finalize documents addition, this function must be called for the document addtion to be taken into account.
+    pub fn finalize_document_addition(&self, segment_writer: SegmentWriter, segment: Segment) -> crate::Result<()>{
+        if !self.segment_updater.is_alive() {
+            return Ok(());
+        }
+
+        let max_doc = segment_writer.max_doc();
+
+        if max_doc == 0 {
+            return Ok(());
+        }
+
+        let doc_opstamps: Vec<Opstamp> = segment_writer.finalize()?;
+
+        let segment_with_max_doc = segment.with_max_doc(max_doc);
+
+        let mut delete_cursor = self.delete_queue.cursor();
+
+        let alive_bitset_opt = apply_deletes(&segment_with_max_doc, &mut delete_cursor, &doc_opstamps)?;
+
+        let meta = segment_with_max_doc.meta().clone();
+        meta.untrack_temp_docstore();
+        // update segment_updater inventory to remove tempstore
+        let segment_entry = SegmentEntry::new(meta, delete_cursor, alive_bitset_opt);
+        self.segment_updater.schedule_add_segment(segment_entry)?;
+        Ok(())
+    }
+
+
     /// Gets a range of stamps from the stamper and "pops" the last stamp
     /// from the range returning a tuple of the last optstamp and the popped
     /// range.
