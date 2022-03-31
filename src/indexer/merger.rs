@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use itertools::Itertools;
+#[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
 use measure_time::debug_time;
 use tantivy_bitpacker::minmax;
 
@@ -278,6 +279,7 @@ impl IndexMerger {
         mut term_ord_mappings: HashMap<Field, TermOrdinalMapping>,
         doc_id_mapping: &SegmentDocIdMapping,
     ) -> crate::Result<()> {
+        #[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
         debug_time!("write-fast-fields");
 
         for (field, field_entry) in self.schema.fields() {
@@ -597,6 +599,7 @@ impl IndexMerger {
         fast_field_serializer: &mut CompositeFastFieldSerializer,
         doc_id_mapping: &SegmentDocIdMapping,
     ) -> crate::Result<()> {
+        #[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
         debug_time!("write-hierarchical-facet-field");
 
         // Multifastfield consists of 2 fastfields.
@@ -827,6 +830,7 @@ impl IndexMerger {
         fieldnorm_reader: Option<FieldNormReader>,
         doc_id_mapping: &SegmentDocIdMapping,
     ) -> crate::Result<Option<TermOrdinalMapping>> {
+        #[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
         debug_time!("write-postings-for-field");
         let mut positions_buffer: Vec<u32> = Vec::with_capacity(1_000);
         let mut delta_computer = DeltaComputer::new();
@@ -1023,6 +1027,7 @@ impl IndexMerger {
         store_writer: &mut StoreWriter,
         doc_id_mapping: &SegmentDocIdMapping,
     ) -> crate::Result<()> {
+        #[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
         debug_time!("write-storable-fields");
         debug!("write-storable-field");
 
